@@ -30,8 +30,10 @@ SHARED_DIR = '/content/drive/MyDrive/watermark_internship'
 %cd /content/repo
 !pip install -q -r requirements.txt
 
-# Cell 3: Unpack preprocessed splits (300 fit + 500 test PNGs, ~120 MB)
-!unzip -q /content/repo/data/processed_splits.zip -d /content/repo/data/processed/
+# Cell 3: Unpack preprocessed splits from shared Google Drive
+!mkdir -p /content/repo/data
+!if [ -f $SHARED_DIR/processed_splits.zip ]; then cp $SHARED_DIR/processed_splits.zip /content/repo/data/; fi
+!unzip -q /content/repo/data/processed_splits.zip -d /content/repo/data/
 ```
 
 ---
