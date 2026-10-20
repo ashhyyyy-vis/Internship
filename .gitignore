@@ -1,0 +1,47 @@
+# Python & Virtual Environments
+.venv/
+.uv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Data & Datasets (Shared via Google Drive)
+data/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Model weights & checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+
+# Results, CSVs & experiment outputs (Shared via Google Drive)
+results/
+*.csv
+*.log
+
+# Generated figures & plots (Shared via Google Drive / local report)
+figures/*.png
+figures/*.jpg
+figures/*.jpeg
+figures/*.svg
+!figures/report/
+
+# OS and Editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

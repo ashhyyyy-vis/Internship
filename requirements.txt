@@ -1,0 +1,20 @@
+# Core deep learning and computer vision
+torch>=2.0.0
+torchvision>=0.15.0
+diffusers>=0.20.0
+transformers>=4.30.0
+accelerate>=0.20.0
+compressai>=1.2.4
+kornia>=0.7.0
+lpips>=0.1.4
+
+# Scientific computing & data processing
+numpy>=1.22.0
+scipy>=1.10.0
+scikit-image>=0.20.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+tqdm>=4.65.0
+
+# Optional external reference baseline
+trustmark>=0.1.0
