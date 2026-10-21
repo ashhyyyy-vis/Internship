@@ -62,7 +62,8 @@ def run_measure_sweep(
     attack_names: List[str] = ["compressai", "sd_vae"],
     psnr_targets: List[float] = [35.0, 40.0, 45.0],
     device_str: str = "cuda" if torch.cuda.is_available() else "cpu",
-    limit_images: int = 300,
+    limit_images: int = 64,
+    batch_size: int = 16,
 ):
     device = torch.device(device_str)
     out_path = Path(output_csv)
@@ -74,7 +75,16 @@ def run_measure_sweep(
     if limit_images > 0 and len(manifest) > limit_images:
         manifest = manifest[:limit_images]
 
-    print(f"[Track A] Loaded {len(manifest)} images from {manifest_path}")
+    print(f"[Track A] Preloading {len(manifest)} images on {device}...")
+    loaded_imgs = []
+    for fname in manifest:
+        img_path = resolve_image_path(images_dir, fname)
+        pil_img = Image.open(img_path).convert("RGB")
+        arr = torch.from_numpy(np.array(pil_img, dtype=np.float32) / 255.0).permute(2, 0, 1)
+        loaded_imgs.append(arr)
+    all_imgs = torch.stack(loaded_imgs, dim=0).to(device)  # (N, 3, 256, 256)
+    n_images = len(all_imgs)
+    print(f"[Track A] Preloaded {n_images} images. Processing in GPU batches of {batch_size}...")
 
     # Initialize attack objects
     attack_objects = [get_attack_family(att) for att in attack_names]
@@ -88,56 +98,42 @@ def run_measure_sweep(
     for att in attack_objects:
         print(f"\n[Track A] Measuring attack family: {att.name}")
         for strength in att.strengths:
-            print(f"  Strength: {strength}")
             for psnr in psnr_targets:
                 for band_idx in range(8):
                     e_in_list = []
                     e_out_list = []
 
-                    for idx, fname in enumerate(tqdm(manifest, desc=f"Band {band_idx} @ {psnr}dB", leave=False)):
-                        img_path = resolve_image_path(images_dir, fname)
+                    for start_idx in range(0, n_images, batch_size):
+                        end_idx = min(start_idx + batch_size, n_images)
+                        batch_x = all_imgs[start_idx:end_idx]
+                        seed = 1000 + start_idx
 
-                        # Load 256x256 image in [0, 1]
-                        pil_img = Image.open(img_path).convert("RGB")
-                        img_tensor = (
-                            torch.from_numpy(np.array(pil_img, dtype=np.float32) / 255.0)
-                            .permute(2, 0, 1)
-                            .unsqueeze(0)
-                            .to(device)
+                        # Batched probe embed
+                        x_w, _ = embed_probe(
+                            batch_x, band_idx=band_idx, psnr_db=psnr, seed=seed, round_8bit=True
                         )
 
-                        # Embed probe
-                        seed = 1000 + idx
-                        x_w, probe_added = embed_probe(
-                            img_tensor, band_idx=band_idx, psnr_db=psnr, seed=seed, round_8bit=True
-                        )
-
-                        # Attack both images with exact same seed
+                        # Batched attacks
                         with torch.no_grad():
-                            a_x = att(img_tensor, strength=strength, seed=seed)
+                            a_x = att(batch_x, strength=strength, seed=seed)
                             a_xw = att(x_w, strength=strength, seed=seed)
 
-                        # Compute luminance deltas
-                        delta_in = rgb_to_luminance(x_w - img_tensor).squeeze(0)
-                        delta_out = rgb_to_luminance(a_xw - a_x).squeeze(0)
+                        # Batched luminance deltas
+                        delta_in = rgb_to_luminance(x_w - batch_x)    # (B, H, W)
+                        delta_out = rgb_to_luminance(a_xw - a_x)      # (B, H, W)
 
-                        # Band energy for the probe band
-                        e_in_band = compute_band_energy(delta_in, masks)[band_idx].item()
-                        e_out_band = compute_band_energy(delta_out, masks)[band_idx].item()
+                        # Band energy for the probe band (B, 8) -> extract column band_idx
+                        e_in_b = compute_band_energy(delta_in, masks)[:, band_idx].cpu().numpy()
+                        e_out_b = compute_band_energy(delta_out, masks)[:, band_idx].cpu().numpy()
 
-                        e_in_list.append(e_in_band)
-                        e_out_list.append(e_out_band)
+                        e_in_list.extend(e_in_b)
+                        e_out_list.extend(e_out_b)
 
                     e_in_arr = np.array(e_in_list)
                     e_out_arr = np.array(e_out_list)
 
-                    # Transfer function: H(b) = sqrt(mean(E_out / E_in))
                     valid = e_in_arr > 1e-12
-                    if np.any(valid):
-                        ratio = e_out_arr[valid] / e_in_arr[valid]
-                        h_val = float(np.sqrt(np.mean(ratio)))
-                    else:
-                        h_val = 0.0
+                    h_val = float(np.sqrt(np.mean(e_out_arr[valid] / e_in_arr[valid]))) if np.any(valid) else 0.0
 
                     row = {
                         "attack": att.name,
@@ -152,8 +148,7 @@ def run_measure_sweep(
                     results.append(row)
 
                     # Incremental flush to CSV
-                    df = pd.DataFrame(results)
-                    df.to_csv(out_path, index=False)
+                    pd.DataFrame(results).to_csv(out_path, index=False)
 
     print(f"\n[Track A] Finished sweep! Saved {len(results)} rows to {output_csv}")
 
