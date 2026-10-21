@@ -20,7 +20,7 @@ import random
 import zipfile
 import urllib.request
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from PIL import Image
 from tqdm import tqdm
 

@@ -172,10 +172,33 @@ def run_training():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-5)
     bce_loss = nn.BCEWithLogitsLoss()
 
-    print(f"[Track C] Starting training for {args.epochs} epochs on {device} (Regime: {args.fixed_regime})...")
-
+    # Resume from checkpoint if it exists
+    checkpoint_file = save_path / "latest_checkpoint.pt"
+    history_file = save_path / "training_history.json"
+    start_epoch = 1
     history = []
-    for epoch in range(1, args.epochs + 1):
+
+    if checkpoint_file.exists():
+        print(f"[Track C] Found existing checkpoint at {checkpoint_file}. Resuming training...")
+        ckpt = torch.load(checkpoint_file, map_location=device)
+        encoder.load_state_dict(ckpt["encoder"])
+        decoder.load_state_dict(ckpt["decoder"])
+        if "optimizer" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer"])
+        start_epoch = ckpt.get("epoch", 0) + 1
+        if history_file.exists():
+            with open(history_file, "r") as f:
+                history = json.load(f)
+        print(f"[Track C] Successfully resumed! Starting from epoch {start_epoch}/{args.epochs}")
+
+    if start_epoch > args.epochs:
+        print(f"[Track C] Model already trained for {args.epochs} epochs. Nothing to do!")
+        return
+
+    print(f"[Track C] Training for epochs {start_epoch} to {args.epochs} on {device} (Regime: {args.fixed_regime})...")
+
+    best_acc = 0.0
+    for epoch in range(start_epoch, args.epochs + 1):
         # Curriculum: Identity for first 3 epochs, then mixture
         if args.overfit_100 or epoch <= 3:
             mode = "identity"
@@ -199,19 +222,23 @@ def run_training():
             "g": g,
         })
 
-        # Save checkpoint
-        torch.save({
+        # Save checkpoint directly to save_dir (in Drive) after EVERY epoch
+        ckpt_data = {
             "epoch": epoch,
             "encoder": encoder.state_dict(),
             "decoder": decoder.state_dict(),
             "g": g,
             "optimizer": optimizer.state_dict(),
-        }, save_path / "latest_checkpoint.pt")
+        }
+        torch.save(ckpt_data, checkpoint_file)
+        if bit_acc > best_acc:
+            best_acc = bit_acc
+            torch.save(ckpt_data, save_path / "best_checkpoint.pt")
 
-        with open(save_path / "training_history.json", "w") as f:
+        with open(history_file, "w") as f:
             json.dump(history, f, indent=2)
 
-    print(f"[Track C] Training complete! Checkpoints saved to {save_path}")
+    print(f"[Track C] Training complete! All checkpoints saved safely to {save_path}")
 
 
 if __name__ == "__main__":
