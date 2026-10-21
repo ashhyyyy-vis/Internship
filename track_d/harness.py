@@ -189,8 +189,9 @@ def run_benchmark():
             ckpt_root / sub_name / "best_checkpoint.pt",
             Path(f"/content/drive/MyDrive/watermark_internship/checkpoints/{sub_name}/latest_checkpoint.pt"),
             Path(f"/content/drive/MyDrive/watermark_internship/checkpoints/{sub_name}/best_checkpoint.pt"),
-            *list(Path("/content/drive").glob(f"**/checkpoints/{sub_name}/*.pt")) if Path("/content/drive").exists() else [],
         ]
+        if Path("/content/drive").exists():
+            cand_paths.extend(list(Path("/content/drive").glob(f"**/checkpoints/{sub_name}/*.pt")))
         ckpt_path = next((p for p in cand_paths if p.exists()), None)
 
         if not ckpt_path:
