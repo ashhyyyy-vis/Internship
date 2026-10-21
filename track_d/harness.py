@@ -177,9 +177,24 @@ def run_benchmark():
         ("learned_main_surrogate", ckpt_root / "main_stage2_surrogate" / "latest_checkpoint.pt", None),
     ]
 
-    for m_name, ckpt_path, regime in models_to_test:
-        if not ckpt_path.exists():
-            print(f"[Track D] Notice: Checkpoint {ckpt_path} not found. Skipping {m_name}.")
+    for m_name, sub_name, regime in [
+        ("learned_control_low", "control_low", "low"),
+        ("learned_control_mid", "control_mid", "mid"),
+        ("learned_control_high", "control_high", "high"),
+        ("learned_main_surrogate", "main_stage2_surrogate", None),
+    ]:
+        # Search multiple candidate locations for the checkpoint
+        cand_paths = [
+            ckpt_root / sub_name / "latest_checkpoint.pt",
+            ckpt_root / sub_name / "best_checkpoint.pt",
+            Path(f"/content/drive/MyDrive/watermark_internship/checkpoints/{sub_name}/latest_checkpoint.pt"),
+            Path(f"/content/drive/MyDrive/watermark_internship/checkpoints/{sub_name}/best_checkpoint.pt"),
+            *list(Path("/content/drive").glob(f"**/checkpoints/{sub_name}/*.pt")) if Path("/content/drive").exists() else [],
+        ]
+        ckpt_path = next((p for p in cand_paths if p.exists()), None)
+
+        if not ckpt_path:
+            print(f"[Track D] Notice: Checkpoint for {sub_name} not found in {ckpt_root} or Drive. Skipping {m_name}.")
             continue
 
         print(f"\n[Track D] Loading {m_name} from {ckpt_path}...")
