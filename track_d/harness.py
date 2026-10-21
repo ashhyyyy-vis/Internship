@@ -113,4 +113,94 @@ def evaluate_model(
             # Incremental save
             pd.DataFrame(results).to_csv(out_path, index=False)
 
-    print(f"\n[Track D] Evaluation complete! Saved to {output_csv}")
+    print(f"\n[Track D] Evaluation complete for {method_name}! Saved to {output_csv}")
+    return results
+
+
+class LearnedWatermarkerWrapper:
+    def __init__(self, encoder: torch.nn.Module, decoder: torch.nn.Module, device: torch.device):
+        self.encoder = encoder.to(device).eval()
+        self.decoder = decoder.to(device).eval()
+        self.device = device
+
+    def embed(self, x: torch.Tensor, msg: torch.Tensor, psnr_db: float = 40.0) -> torch.Tensor:
+        with torch.no_grad():
+            x_w, _ = self.encoder(x, msg)
+            return torch.clamp(x_w, 0.0, 1.0)
+
+    def decode(self, x_att: torch.Tensor) -> Tuple[torch.Tensor, None]:
+        with torch.no_grad():
+            logits = self.decoder(x_att)
+            decoded_bits = (logits > 0.0).long()
+            return decoded_bits, None
+
+
+def run_benchmark():
+    parser = argparse.ArgumentParser(description="Track D: Unified Evaluation Harness")
+    parser.add_argument("--manifest", type=str, default="data/manifests/test_manifest.json")
+    parser.add_argument("--images_dir", type=str, default="data/processed/test")
+    parser.add_argument("--out", type=str, default="results/merge2_final_eval.csv")
+    parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
+    parser.add_argument("--attacks", nargs="+", default=["sd_vae", "compressai"])
+    parser.add_argument("--limit", type=int, default=100)
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    ckpt_root = Path(args.checkpoints_dir)
+    all_results = []
+
+    # 1. Classical spread-spectrum baseline (Band 0 & Band 2)
+    from track_b.watermark import ClassicalSpreadSpectrumWatermarker
+    for test_band in [0, 2]:
+        watermarker_ss = ClassicalSpreadSpectrumWatermarker(n_bits=32, n_bands=8, h=256, w=256, secret_key=42, device=device)
+        class SSWrapper:
+            def __init__(self, b_idx):
+                self.b_idx = b_idx
+            def embed(self, x, msg, psnr_db=40.0):
+                return watermarker_ss.embed(x, msg, band_idx=self.b_idx, psnr_db=psnr_db, round_8bit=True)
+            def decode(self, x_att):
+                return watermarker_ss.decode(x_att, band_idx=self.b_idx)
+
+        res = evaluate_model(
+            SSWrapper(test_band), f"classical_ss_band{test_band}",
+            args.manifest, args.images_dir, args.out,
+            attack_names=args.attacks, limit_images=args.limit, device_str=str(device)
+        )
+        all_results.extend(res)
+
+    # 2. Evaluate Trained Learned Models from checkpoints
+    from track_c.model import WatermarkEncoder, WatermarkDecoder
+    models_to_test = [
+        ("learned_control_low", ckpt_root / "control_low" / "latest_checkpoint.pt", "low"),
+        ("learned_control_mid", ckpt_root / "control_mid" / "latest_checkpoint.pt", "mid"),
+        ("learned_control_high", ckpt_root / "control_high" / "latest_checkpoint.pt", "high"),
+        ("learned_main_surrogate", ckpt_root / "main_stage2_surrogate" / "latest_checkpoint.pt", None),
+    ]
+
+    for m_name, ckpt_path, regime in models_to_test:
+        if not ckpt_path.exists():
+            print(f"[Track D] Notice: Checkpoint {ckpt_path} not found. Skipping {m_name}.")
+            continue
+
+        print(f"\n[Track D] Loading {m_name} from {ckpt_path}...")
+        enc = WatermarkEncoder(n_bits=32, psnr_target=40.0, fixed_regime=regime)
+        dec = WatermarkDecoder(n_bits=32)
+        ckpt = torch.load(ckpt_path, map_location=device)
+        enc.load_state_dict(ckpt["encoder"])
+        dec.load_state_dict(ckpt["decoder"])
+
+        wrapper = LearnedWatermarkerWrapper(enc, dec, device)
+        res = evaluate_model(
+            wrapper, m_name,
+            args.manifest, args.images_dir, args.out,
+            attack_names=args.attacks, limit_images=args.limit, device_str=str(device)
+        )
+        all_results.extend(res)
+
+    pd.DataFrame(all_results).to_csv(args.out, index=False)
+    print(f"\n✓ Unified Merge 2 benchmark completed! Total {len(all_results)} evaluations written to {args.out}")
+
+
+if __name__ == "__main__":
+    from typing import Tuple
+    run_benchmark()
