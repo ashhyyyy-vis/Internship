@@ -24,6 +24,7 @@ from scipy.stats import binom
 from track_b.watermark import ClassicalSpreadSpectrumWatermarker
 from core.attacks import get_attack_family
 from core.probes import compute_psnr
+from core.dataset_utils import resolve_image_path
 
 
 def compute_ssim_tensor(x: torch.Tensor, y: torch.Tensor) -> float:
@@ -102,12 +103,7 @@ def run_classical_sweep(
     for band_idx in range(n_bands):
         for psnr in psnr_targets:
             for idx, fname in enumerate(manifest):
-                img_path = Path(images_dir) / fname
-                if not img_path.exists():
-                    img_path = Path(images_dir) / f"{Path(fname).stem}.png"
-                if not img_path.exists():
-                    continue
-
+                img_path = resolve_image_path(images_dir, fname)
                 pil_img = Image.open(img_path).convert("RGB")
                 x = torch.from_numpy(np.array(pil_img, dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to(device)
                 msg = messages[fname]
@@ -139,12 +135,7 @@ def run_classical_sweep(
             for psnr in psnr_targets:
                 for band_idx in range(n_bands):
                     for idx, fname in enumerate(tqdm(manifest, desc=f"{att.name} s={strength} b={band_idx} @ {psnr}dB", leave=False)):
-                        img_path = Path(images_dir) / fname
-                        if not img_path.exists():
-                            img_path = Path(images_dir) / f"{Path(fname).stem}.png"
-                        if not img_path.exists():
-                            continue
-
+                        img_path = resolve_image_path(images_dir, fname)
                         pil_img = Image.open(img_path).convert("RGB")
                         x = torch.from_numpy(np.array(pil_img, dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to(device)
                         msg = messages[fname]

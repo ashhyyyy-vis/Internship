@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 from core.attacks import get_attack_family
 from core.probes import compute_psnr
+from core.dataset_utils import resolve_image_path
 from track_b.sweep import compute_ssim_tensor
 from track_d.metrics import calculate_tau, compute_bit_accuracy
 
@@ -64,12 +65,7 @@ def evaluate_model(
         print(f"\n[Track D] Benchmarking on attack: {att.name}")
         for strength in att.strengths:
             for idx, fname in enumerate(tqdm(manifest, desc=f"{att.name} s={strength}", leave=False)):
-                img_path = Path(images_dir) / fname
-                if not img_path.exists():
-                    img_path = Path(images_dir) / f"{Path(fname).stem}.png"
-                if not img_path.exists():
-                    continue
-
+                img_path = resolve_image_path(images_dir, fname)
                 pil_img = Image.open(img_path).convert("RGB")
                 x = torch.from_numpy(np.array(pil_img, dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0).to(device)
                 msg = test_messages[fname]

@@ -12,7 +12,7 @@ Implements Section 9 (Track D):
   Decodes unwatermarked attacked images to verify bit agreement averages 50% (+- 1%) with no per-bit bias
 """
 
-from typing import Tuple, List, Dict, Optional, Union
+from typing import Tuple, List, Dict, Optional, Union, Any
 import math
 import torch
 import numpy as np

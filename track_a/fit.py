@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 from core.radial import frequency_grid, compute_power2d, radial_profile, rgb_to_luminance
 from core.bands import band_centers
+from core.dataset_utils import resolve_image_path
 
 
 def fit_image_spectrum(
@@ -61,12 +62,7 @@ def fit_image_spectrum(
     all_alpha = []
 
     for fname in tqdm(manifest, desc="[Track A] Fitting P(f) spectra"):
-        img_path = Path(images_dir) / fname
-        if not img_path.exists():
-            stem = img_path.stem
-            img_path = Path(images_dir) / f"{stem}.png"
-        if not img_path.exists():
-            continue
+        img_path = resolve_image_path(images_dir, fname)
 
         pil_img = Image.open(img_path).convert("RGB")
         arr = np.array(pil_img, dtype=np.float32) / 255.0

@@ -141,8 +141,8 @@ def preprocess_image(src_path: Path, dst_path: Path, target_size: int = 256):
         img_cropped.save(dst_path, format="PNG")
 
 
-def preprocess_splits(raw_dir: Path, fit_files: List[str], test_files: List[str]):
-    """Process and save fit (300) and test (500) sets as 256x256 PNGs."""
+def preprocess_splits(raw_dir: Path, fit_files: List[str], test_files: List[str], train_files: Optional[List[str]] = None, max_train: int = 1000):
+    """Process and save fit (300), test (500), and train sets as 256x256 PNGs."""
     print("[data_prep] Preprocessing fit split (300 images)...")
     fit_out = PROCESSED_DIR / "fit"
     for fname in tqdm(fit_files):
@@ -155,6 +155,14 @@ def preprocess_splits(raw_dir: Path, fit_files: List[str], test_files: List[str]
         stem = Path(fname).stem
         preprocess_image(raw_dir / fname, test_out / f"{stem}.png")
 
+    if train_files:
+        train_subset = train_files[:max_train]
+        print(f"[data_prep] Preprocessing train split ({len(train_subset)} images)...")
+        train_out = PROCESSED_DIR / "train"
+        for fname in tqdm(train_subset):
+            stem = Path(fname).stem
+            preprocess_image(raw_dir / fname, train_out / f"{stem}.png")
+
     print("[data_prep] Packing processed fit & test splits into zip for Colab upload...")
     zip_target = DATA_DIR / "processed_splits.zip"
     with zipfile.ZipFile(zip_target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -162,6 +170,9 @@ def preprocess_splits(raw_dir: Path, fit_files: List[str], test_files: List[str]
             zf.write(p, arcname=f"fit/{p.name}")
         for p in test_out.glob("*.png"):
             zf.write(p, arcname=f"test/{p.name}")
+        if (PROCESSED_DIR / "train").exists():
+            for p in (PROCESSED_DIR / "train").glob("*.png"):
+                zf.write(p, arcname=f"train/{p.name}")
         zf.write(MANIFEST_DIR / "fit_manifest.json", arcname="manifests/fit_manifest.json")
         zf.write(MANIFEST_DIR / "test_manifest.json", arcname="manifests/test_manifest.json")
         zf.write(MANIFEST_DIR / "train_manifest.json", arcname="manifests/train_manifest.json")
@@ -169,11 +180,11 @@ def preprocess_splits(raw_dir: Path, fit_files: List[str], test_files: List[str]
     print(f"[data_prep] Packed {zip_target} (Size: {zip_target.stat().st_size / (1024*1024):.2f} MB).")
 
 
-def run():
+def run(max_train: int = 1000):
     ensure_dirs()
     raw_dir = download_val2017()
-    fit_files, test_files, _ = create_manifests(raw_dir)
-    preprocess_splits(raw_dir, fit_files, test_files)
+    fit_files, test_files, train_files = create_manifests(raw_dir)
+    preprocess_splits(raw_dir, fit_files, test_files, train_files, max_train=max_train)
     print("[data_prep] Phase 0 data preparation complete.")
 
 

@@ -26,6 +26,7 @@ from PIL import Image
 from core.radial import rgb_to_luminance, compute_power2d
 from core.bands import band_masks
 from core.probes import embed_probe
+from core.dataset_utils import resolve_image_path
 from core.attacks import (
     get_attack_family,
     CompressAIAttack,
@@ -94,12 +95,7 @@ def run_measure_sweep(
                     e_out_list = []
 
                     for idx, fname in enumerate(tqdm(manifest, desc=f"Band {band_idx} @ {psnr}dB", leave=False)):
-                        img_path = Path(images_dir) / fname
-                        if not img_path.exists():
-                            stem = img_path.stem
-                            img_path = Path(images_dir) / f"{stem}.png"
-                        if not img_path.exists():
-                            continue
+                        img_path = resolve_image_path(images_dir, fname)
 
                         # Load 256x256 image in [0, 1]
                         pil_img = Image.open(img_path).convert("RGB")
