@@ -185,14 +185,38 @@ class StableDiffusionVAEAttack(AttackBase):
         self._vae: Optional[nn.Module] = None
 
     def get_vae(self) -> nn.Module:
-        if self._vae is None:
+        if self._vae is not None:
+            return self._vae
+
+        # 1. First attempt: diffusers AutoencoderKL with defensive import environment
+        try:
+            import sys
+            # Block peft dynamically so diffusers never pulls in broken text models
+            if "peft" not in sys.modules:
+                sys.modules["peft"] = None
+            import huggingface_hub
+            if not hasattr(huggingface_hub, "cached_download"):
+                huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
             from diffusers import AutoencoderKL
             vae = AutoencoderKL.from_pretrained(self.model_id)
             vae.eval().to(self.device)
             for p in vae.parameters():
                 p.requires_grad = False
             self._vae = vae
-        return self._vae
+            print(f"✓ Loaded {self.model_id} via diffusers")
+            return self._vae
+        except Exception as err:
+            print(f"Diffusers load failed ({err}), falling back to direct pure PyTorch AutoencoderKL...")
+
+        # 2. Bulletproof Fallback: Pure PyTorch AutoencoderKL (zero diffusers/transformers dependencies)
+        try:
+            from core.sd_vae import load_sd_vae
+            vae = load_sd_vae(self.model_id, device=self.device)
+            self._vae = vae
+            return self._vae
+        except Exception as err2:
+            raise RuntimeError(f"Failed to load SD-VAE via both diffusers ({err}) and pure PyTorch ({err2})")
 
     def __call__(
         self,

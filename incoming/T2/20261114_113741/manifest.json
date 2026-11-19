@@ -1,0 +1,19 @@
+{
+  "task": "T2",
+  "version": "v1",
+  "chunk_id": 2,
+  "chunk_name": "compressai_q5-8",
+  "timestamp": "20261114_113454",
+  "files": [
+    "results_chunk2.csv"
+  ],
+  "checksums": {
+    "results_chunk2.csv": "d2ed6e57ded1c73b6cf617577f23ff466d79ba0cf4b47703f67aeff33b389f4c"
+  },
+  "summary": {
+    "gpu": "Tesla T4, 15360 MiB",
+    "n_images": 500,
+    "n_rows": 22000,
+    "smoke": false
+  }
+}

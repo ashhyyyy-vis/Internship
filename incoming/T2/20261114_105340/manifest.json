@@ -1,0 +1,19 @@
+{
+  "task": "T2",
+  "version": "v1",
+  "chunk_id": 0,
+  "chunk_name": "sd_vae",
+  "timestamp": "20261114_104607",
+  "files": [
+    "results_chunk0.csv"
+  ],
+  "checksums": {
+    "results_chunk0.csv": "9ccd3ebc4dd7917f0fc9424fa26b569b37d1591f62b046d2897fa1b7e3f139cb"
+  },
+  "summary": {
+    "gpu": "Tesla T4, 15360 MiB",
+    "n_images": 500,
+    "n_rows": 33000,
+    "smoke": false
+  }
+}

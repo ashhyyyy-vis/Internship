@@ -195,55 +195,66 @@ def plot_fig3_classical_heatmaps(
 
 
 def plot_fig4_learned_weights(
-    history_json: str = "checkpoints/main_stage2_surrogate/training_history.json",
-    eval_csv: Optional[str] = "results/merge2_final_eval.csv",
-    out_file: str = "figures/fig4_learned_allocation.png",
+    eval_csv: str = "results/merge2_final_eval.csv",
+    history_json: Optional[str] = "checkpoints/main_stage2_surrogate/training_history.json",
+    out_file: str = "figures/fig4_held_out_benchmark.png",
 ):
-    """Fig 4: Learned dynamic band allocation weights g_b & Merge 2 robustness comparison."""
+    """Fig 4: Held-out benchmark comparison on SD VAE and CompressAI (Merge 2)."""
     FIG_DIR.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    df_eval = pd.read_csv(eval_csv)
 
-    # Plot 4A: Evolution of band weights over epochs
-    hist_path = Path(history_json)
-    if hist_path.exists():
-        with open(hist_path, "r") as f:
-            hist = json.load(f)
-        epochs = [entry["epoch"] for entry in hist]
-        g_weights = np.array([entry["g"] for entry in hist])  # (E, 8)
-        for b in range(8):
-            axes[0].plot(epochs, g_weights[:, b], label=f"Band {b}", linewidth=2)
-        axes[0].set_xlabel("Epoch")
-        axes[0].set_ylabel("Normalized Energy Weight $g_b$")
-        axes[0].set_title("Learned Band Allocation Evolution (Track C)")
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    # Color palette and readable labels for methods
+    method_styles = {
+        "classical_ss_band0": ("#1f77b4", "o-", "Classical SS (Band 0: Low)"),
+        "classical_ss_band2": ("#2ca02c", "s-", "Classical SS (Band 2: Mid-Low)"),
+        "learned_control_low": ("#ff7f0e", "^-", "Learned Control (Low Bands 0-2)"),
+        "learned_control_mid": ("#9467bd", "v-", "Learned Control (Mid Bands 3-5)"),
+        "learned_control_high": ("#8c564b", "x-", "Learned Control (High Bands 6-7)"),
+        "learned_main_surrogate": ("#d62728", "D-", "Learned Main (Surrogate Trained)"),
+    }
+
+    # Panel A: SD VAE Robustness vs Noise Variance / Strength
+    sd_data = df_eval[df_eval["attack"] == "sd_vae"].copy()
+    if not sd_data.empty:
+        sd_data["strength_num"] = pd.to_numeric(sd_data["strength"], errors="coerce")
+        for m_name in method_styles:
+            sub = sd_data[sd_data["method"] == m_name]
+            if not sub.empty:
+                agg = sub.groupby("strength_num")["bit_acc"].mean().reset_index()
+                color, marker, label = method_styles[m_name]
+                axes[0].plot(agg["strength_num"], agg["bit_acc"], marker, color=color, label=label, linewidth=2, markersize=6)
+
+        axes[0].axhline(0.5, color="black", linestyle=":", alpha=0.6, label="Random Guess (50%)")
+        axes[0].set_xlabel("Noise Std Dev $\sigma$ (SD VAE Regeneration)", fontsize=11)
+        axes[0].set_ylabel("Bit Accuracy", fontsize=11)
+        axes[0].set_title("(A) Held-Out Benchmark: Stable Diffusion VAE", fontsize=12, fontweight="bold")
+        axes[0].set_ylim(0.45, 0.85)
         axes[0].grid(True, alpha=0.3)
-        axes[0].legend(loc="upper left", ncol=2, fontsize=8)
-    else:
-        axes[0].text(0.5, 0.5, "Training history not found", ha="center", va="center")
-        axes[0].set_title("Learned Band Allocation Evolution")
+        axes[0].legend(loc="upper right", fontsize=8.5)
 
-    # Plot 4B: Robustness comparison on held-out SD VAE (Merge 2)
-    if eval_csv and Path(eval_csv).exists():
-        df_eval = pd.read_csv(eval_csv)
-        sd_data = df_eval[df_eval["attack"].str.contains("sd_vae|stability", case=False, na=False)]
-        if not sd_data.empty:
-            for m_name, sub in sd_data.groupby("method"):
-                sub_agg = sub.groupby("strength")["bit_acc"].mean().reset_index()
-                axes[1].plot(sub_agg["strength"].astype(str), sub_agg["bit_acc"], "o-", label=m_name, linewidth=2)
-            axes[1].set_xlabel("Attack Strength ($\sigma$)")
-            axes[1].set_ylabel("Bit Accuracy")
-            axes[1].set_ylim(0.45, 1.02)
-            axes[1].axhline(0.5, color="gray", linestyle="--", alpha=0.5, label="Random Guess")
-            axes[1].set_title("Held-out SD VAE Robustness (Merge 2)")
-            axes[1].grid(True, alpha=0.3)
-            axes[1].legend(fontsize=8)
-        else:
-            axes[1].text(0.5, 0.5, "No SD VAE data in eval CSV", ha="center", va="center")
-    else:
-        axes[1].text(0.5, 0.5, "merge2_final_eval.csv not generated yet", ha="center", va="center")
-        axes[1].set_title("Held-out SD VAE Robustness (Merge 2)")
+    # Panel B: CompressAI Robustness vs Quality Factor
+    cai_data = df_eval[df_eval["attack"] == "compressai_bmshj2018"].copy()
+    if not cai_data.empty:
+        cai_data["strength_num"] = pd.to_numeric(cai_data["strength"], errors="coerce")
+        for m_name in method_styles:
+            sub = cai_data[cai_data["method"] == m_name]
+            if not sub.empty:
+                agg = sub.groupby("strength_num")["bit_acc"].mean().reset_index()
+                color, marker, label = method_styles[m_name]
+                axes[1].plot(agg["strength_num"], agg["bit_acc"], marker, color=color, label=label, linewidth=2, markersize=6)
+
+        axes[1].axhline(0.5, color="black", linestyle=":", alpha=0.6, label="Random Guess (50%)")
+        axes[1].set_xlabel("Compression Quality Factor $q$ (CompressAI)", fontsize=11)
+        axes[1].set_ylabel("Bit Accuracy", fontsize=11)
+        axes[1].set_title("(B) Cross-Model Generalization: CompressAI VAE", fontsize=12, fontweight="bold")
+        axes[1].set_ylim(0.45, 1.02)
+        axes[1].grid(True, alpha=0.3)
+        axes[1].legend(loc="lower right", fontsize=8.5)
 
     plt.tight_layout()
-    plt.savefig(out_file, dpi=180)
+    plt.savefig(out_file, dpi=200)
     plt.close()
     print(f"[Plots] Saved Fig 4 to {out_file}")
 
